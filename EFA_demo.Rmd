@@ -1,0 +1,120 @@
+---
+title: "Customer Satisfaction Index"
+author: "Shankar MM, Mentor - Cares,Bangalore"
+date: "09/30/2018"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: 
+    df_print: kable
+    number_sections: yes
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rmarkdown) # for reporting purpose
+library(psych) # basic and efa analysis
+library(knitr) # reporting
+library(readxl) # to read and write xlsx file
+library(GPArotation) # to get efa diagram
+
+setwd("filename")
+csi <- read_xlsx("csi.xlsx",sheet = "Sheet1")
+```
+*note: Sepcial thanks to  Dr. Kantaraj Tavane, Research Scholar from VTU, who gave permission to use partial data for demo purpose* 
+
+#### Exploratory factor analysis (EFA)
+
+This section dealt with how to use EFA analysis especially using perceptual data which measures
+various constructs such as customer satisfaction, employee commitment or investor bias which is normally captured in the form of rating scale. Though PCA and EFA both are used for dimension reduction,  but theoretically and philosophically both are different, especially EFA dealt with 
+latent but PCA is able to reduce data in the form of images, pictures, videos and financial data etc., former may not concern interpretation of the model, but latter is very much used to not only to reduce the dimension but bring meaning out of dimension formation.
+  
+#### Steps followed in EFA
+
+* Converting raw data into correlation matrix
+* Applying Eigen value on correlation matrix to determine number of factors, especially in academic research, when eigen value is greater than 1, it become factor
+* Estimation method is Maximum likelihood and rotation is based on oblimin than varimax, because most of the time, there is correlation among the derived factors. 
+* Assumptions check, 1. KMO  test for measure of sampling adequacy and 2. Bartlet test of sphericity for factor correlability. 
+* Factor loadings are kept minimum of .35 
+* Factors are named based on domain knowledge with help of prior literature
+
+```{r expl}
+str(csi)  # to display information about data set
+csi1 <- csi[,21:42] # rating scale items is only selected for EFA model
+kable(describe(csi1),caption = "Descriptive statistics of rating items", digits = 2)
+```
+
+#### Exploratory Factor Analysis 
+
+Normally, expected correlation score is ranged between .10 to .70, any thing below .10 or greater than .70, need careful investigation further. based on eigen value greate than 1, 3 factors are derived, Assumpitons test such as KMO and Bartlett test are done. both are meeting the threshold values. Scree plot and factor loadings are obtained.
+
+```{r factor }
+
+satcor<- corr.test(csi1[,-c(8,10,12,18)])  # further items are eliminated in EFA
+satcor<-satcor$r  # storing correlation matrix
+kable(satcor,digits = 2,caption = "Correlation matrix")
+
+ev <- eigen(satcor) # get eigenvalues
+corMat<-ev$values
+
+kable(data.frame(sn=seq(1,length(corMat),1),corMat),caption = "Eigen values",col.names = c("SN","Eigen"),digits = 2)
+kmo<-KMO(satcor)
+paste("Overall kmo:",round(kmo$MSA,3))
+kable(kmo$MSAi,digits = 3,caption = "Measure of sample Adequacy",col.names = "KMO item wise")
+
+barlettest <- cortest.bartlett(satcor,nrow(csi1))
+barletresult <- data.frame(barlettest$chisq,barlettest$df,barlettest$p.value)
+kable(barletresult,col.names = c("chisq","DF","P value"))
+
+plot(corMat,main = "Factors Extracted",ylab = "Eigen value",xlab="No.of factors")
+lines(corMat,col="blue")
+abline(h=1,col="red")
+
+pa.out <- fa(satcor, nfactors= sum(corMat > 1.0), n.obs=nrow(csi), rotate="oblimin", scores="regression", residuals=FALSE, SMC=TRUE, covar=FALSE, missing=TRUE, impute="median", min.err=0.01, max.iter=50, symmetric=TRUE, fm="ml", alpha=.05, p=.05, oblique.scores=TRUE)
+print(pa.out$loadings,sort=T, cutoff=0.3, digits=2)
+fa.diagram(pa.out,col="blue")
+```
+
+#### Factor Mean score
+To arrive single score for each factor,  mean is used to get the item parceling score
+and factors are named based on the domain experts suggestions. 
+
+```{r descp}
+
+d1 <- describe(csi1[,c(15,13,16,14,17,11,9,7)])
+d2<- describe(csi1[,c(1:6)])
+d3<- describe(csi1[,c(19:22)])
+
+csi1$fac1 <- rowMeans(csi1[,c(15,13,16,14,17,11,9,7)])
+csi1$fac2 <- rowMeans(csi1[,c(1:6)])
+csi1$fac3 <- rowMeans(csi1[,c(19:22)])
+
+kable(d1,digits = 2,caption = "First Hand Impressions")
+kable(d2,digits = 2,caption = "Quality confirmation characterstics")
+kable(d3,digits = 2,caption = "After Wash Effectives")
+kable(describe(csi1[,23:25]),caption = "Item parcelled Mean score - Factor wise",digits = 2)
+```
+
+#### Reliability Analysis
+
+Though factor is derived, it is better to assess the cronbach alpha dimension wise, to check the measurement error is in permissible level, Nunally suggested to keep alpha at least more than .7
+
+```{r alpha}
+fac1 <-psych::alpha(csi1[,c(15,13,16,14,17,11,9,7)])
+fac2 <- psych::alpha(csi1[,c(1:6)])
+fac3 <-psych::alpha(csi1[,c(19:22)])
+
+
+
+alphascore <- data.frame(rbind(fac1$total,fac2$total,fac3$total))
+nvar <- data.frame(rbind(fac1$nvar,fac2$nvar,fac3$nvar))
+
+var_name<- c("First Hand Impressions","Quality confirmation characterstics","After Wash Effectives")
+finalalpha<-round(alphascore[,c(1,7,8)],3)
+cronbach<-data.frame(cbind(var_name,finalalpha,nvar))
+colnames(cronbach) <- c("Constructs Name","Cronbach Alpha","Mean","Std","No of items")
+kable(cronbach,caption = "Table Reliability and Descripitve Analysis",digits = 2)
+```
+
